@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB to Cassandra Data Transfer</title>
+    <script>
+        async function loadCollections() {
+            const mongoUri = document.getElementById("mongo_uri").value;
+            const mongoDbName = document.getElementById("mongo_db").value;
+
+            if (mongoUri && mongoDbName) {
+                const response = await fetch(`/get_collections/?mongo_uri=${encodeURIComponent(mongoUri)}&mongo_db=${encodeURIComponent(mongoDbName)}`);
+                const data = await response.json();
+
+                const collectionSelect = document.getElementById("mongo_collection");
+                collectionSelect.innerHTML = '';
+
+                data.collections.forEach(collection => {
+                    const option = document.createElement("option");
+                    option.value = collection;
+                    option.textContent = collection;
+                    collectionSelect.appendChild(option);
+                });
+            }
+        }
+
+        async function fetchCollectionSchema(event) {
+            event.preventDefault();
+
+            const mongoUri = document.getElementById("mongo_uri").value;
+            const mongoDb = document.getElementById("mongo_db").value;
+            const mongoCollection = document.getElementById("mongo_collection").value;
+
+            if (mongoUri && mongoDb && mongoCollection) {
+                const response = await fetch(`/get_schema/?mongo_uri=${encodeURIComponent(mongoUri)}&mongo_db=${encodeURIComponent(mongoDb)}&mongo_collection=${encodeURIComponent(mongoCollection)}`);
+                const data = await response.json();
+
+                const schemaContainer = document.getElementById("schema-container");
+                schemaContainer.innerHTML = '';
+
+                data.schema.forEach(field => {
+                    const row = document.createElement("div");
+                    row.className = "schema-row";
+                    row.innerHTML = `
+                        <label>${field.name} (MongoDB type: ${field.type})</label>
+                        <select name="cassandra_type_${field.name}" id="cassandra_type_${field.name}">
+                            <option value="text">Text</option>
+                            <option value="int">Integer</option>
+                            <option value="float">Float</option>
+                            <option value="boolean">Boolean</option>
+                            <option value="timestamp">Timestamp</option>
+                            <option value="uuid">UUID</option>
+                        </select>
+                        <br>
+                    `;
+                    schemaContainer.appendChild(row);
+                });
+
+                // Show the confirm transfer form
+                document.getElementById("confirm-transfer").style.display = "block";
+
+                // Populate hidden form fields with the current form data
+                document.getElementById("confirm-mongo_uri").value = mongoUri;
+                document.getElementById("confirm-mongo_db").value = mongoDb;
+                document.getElementById("confirm-mongo_collection").value = mongoCollection;
+
+                // Populate Cassandra information
+                const cassandraHost = document.getElementById("cassandra_host").value;
+                const cassandraKeyspace = document.getElementById("cassandra_keyspace").value;
+                const cassandraTable = document.getElementById("cassandra_table").value;
+
+                document.getElementById("confirm-cassandra_host").value = cassandraHost;
+                document.getElementById("confirm-cassandra_keyspace").value = cassandraKeyspace;
+                document.getElementById("confirm-cassandra_table").value = cassandraTable;
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Transfer Data from MongoDB to Cassandra</h1>
+    <form id="connection-form" onsubmit="fetchCollectionSchema(event)">
+        {% csrf_token %}
+
+        <label for="mongo_uri">MongoDB URI:</label>
+        <input type="text" id="mongo_uri" name="mongo_uri" required><br><br>
+
+        <label for="mongo_db">MongoDB Database:</label>
+        <input type="text" id="mongo_db" name="mongo_db" required onblur="loadCollections()"><br><br>
+
+        <label for="mongo_collection">MongoDB Collection:</label>
+        <select id="mongo_collection" name="mongo_collection" required>
+            <option value="">Select a collection</option>
+        </select><br><br>
+
+        <label for="cassandra_host">Cassandra Host:</label>
+        <input type="text" id="cassandra_host" name="cassandra_host" required><br><br>
+
+        <label for="cassandra_keyspace">Cassandra Keyspace:</label>
+        <input type="text" id="cassandra_keyspace" name="cassandra_keyspace" required><br><br>
+
+        <label for="cassandra_table">Cassandra Table Name:</label>
+        <input type="text" id="cassandra_table" name="cassandra_table" required><br><br>
+
+        <button type="submit">Fetch Columns and Types</button>
+    </form>
+
+    <div id="schema-container" style="margin-top: 20px;"></div>
+
+    <form method="post" action="/confirm_transfer/">
+        {% csrf_token %}
+        <div id="confirm-transfer" style="display: none;">
+            <h3>Confirm Transfer with Modified Types</h3>
+
+            <!-- Hidden form fields for MongoDB and Cassandra -->
+            <input type="text" id="confirm-mongo_uri" name="mongo_uri">
+            <input type="text" id="confirm-mongo_db" name="mongo_db">
+            <input type="text" id="confirm-mongo_collection" name="mongo_collection">
+            <input type="text" id="confirm-cassandra_host" name="cassandra_host">
+            <input type="text" id="confirm-cassandra_keyspace" name="cassandra_keyspace">
+            <input type="text" id="confirm-cassandra_table" name="cassandra_table">
+
+            <h3>Schema with Modified Types</h3>
+            <!-- User modified schema types will be submitted when the form is submitted -->
+            <div id="modified-schema"></div>
+
+            <button type="submit">Confirm Transfer</button>
+        </div>
+    </form>
+</body>
+</html>
